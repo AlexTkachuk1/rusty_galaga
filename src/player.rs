@@ -1,6 +1,6 @@
 use crate::{
-    components::{Player, Velocity},
-    GameTexture, WindowSize, BASE_SPEED, PLAYER_SIZE, TIME_STEP,
+    components::{FromPlayer, Laser, Movable, Player, SpriteSize, Velocity},
+    GameTexture, WindowSize, BASE_SPEED, PLAYER_LASER_SIZE, PLAYER_SIZE, TIME_STEP,
 };
 use bevy::{ecs::query, prelude::*};
 
@@ -10,7 +10,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PostStartup, player_spawn_system)
             .add_systems(Update, player_keyboard_event_system)
-            .add_systems(Update, player_movement_system);
+            .add_systems(Update, player_fier_system);
     }
 }
 
@@ -24,17 +24,24 @@ fn player_spawn_system(
         .spawn(SpriteBundle {
             texture: game_textures.player.clone(),
             transform: Transform {
-                scale: Vec3::new(0.1, 0.1, 0.0),
-                translation: Vec3::new(0f32, (bottom + PLAYER_SIZE.1 / 2f32 * 0.5) + 15f32, 10f32),
+                scale: Vec3::new(0.06, 0.06, 0.0),
+                translation: Vec3::new(0f32, (bottom + PLAYER_SIZE.1 * 0.06 * 0.5) + 15f32, 10f32),
                 ..Default::default()
             },
             ..default()
         })
         .insert(Player)
+        .insert(SpriteSize::from(PLAYER_SIZE))
+        .insert(Movable {
+            auto_despown: false,
+        })
         .insert(Velocity { x: 0f32, y: 0f32 });
 }
 
-fn player_keyboard_event_system(kb: Res<Input<KeyCode>>, mut query: Query<&mut Velocity, With<Player>>) {
+fn player_keyboard_event_system(
+    kb: Res<Input<KeyCode>>,
+    mut query: Query<&mut Velocity, With<Player>>,
+) {
     if let Ok(mut velocity) = query.get_single_mut() {
         velocity.x = if kb.pressed(KeyCode::Left) {
             -1f32
@@ -46,10 +53,37 @@ fn player_keyboard_event_system(kb: Res<Input<KeyCode>>, mut query: Query<&mut V
     }
 }
 
-fn player_movement_system(mut query: Query<(&Velocity, &mut Transform), With<Player>>) {
-    for (velocity, mut transform) in query.iter_mut() {
-        let translation = &mut transform.translation;
-        translation.x += velocity.x * TIME_STEP * BASE_SPEED;
-        translation.y += velocity.y * TIME_STEP * BASE_SPEED;
+fn player_fier_system(
+    mut commands: Commands,
+    kb: Res<Input<KeyCode>>,
+    game_textures: Res<GameTexture>,
+    query: Query<&Transform, With<Player>>,
+) {
+    if let Ok(player_tf) = query.get_single() {
+        if kb.just_pressed(KeyCode::Space) {
+            let (x, y) = (player_tf.translation.x, player_tf.translation.y);
+            let x_offset = PLAYER_SIZE.0 * 0.06 * 0.3 - 1.0;
+
+            let mut spawn_laser = |x_offset: f32| {
+                commands
+                    .spawn(SpriteBundle {
+                        texture: game_textures.player_laser.clone(),
+                        transform: Transform {
+                            scale: Vec3::new(0.4, 0.4, 0.0),
+                            translation: Vec3::new(x + x_offset, y, 0.0),
+                            ..Default::default()
+                        },
+                        ..default()
+                    })
+                    .insert(Laser)
+                    .insert(FromPlayer)
+                    .insert(SpriteSize::from(PLAYER_LASER_SIZE))
+                    .insert(Movable { auto_despown: true })
+                    .insert(Velocity { x: 0f32, y: 1f32 });
+            };
+
+            spawn_laser(x_offset);
+            spawn_laser(-x_offset);
+        }
     }
 }
